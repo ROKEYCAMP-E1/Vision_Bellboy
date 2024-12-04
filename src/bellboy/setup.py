@@ -1,3 +1,4 @@
+# setup.py
 from setuptools import find_packages, setup
 
 package_name = 'bellboy'
@@ -21,7 +22,8 @@ setup(
     entry_points={
         'console_scripts': [
             'topview_node = bellboy.topview_camera.topview_cam_node:main', 
-            'testui_node = bellboy.UI.testui_node:main'
+            'testui_node = bellboy.UI.testui_node:main',
+            'amr_node = bellboy.amr.amr_node:main',
         ],
     },
 )

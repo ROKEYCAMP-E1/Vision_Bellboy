@@ -5,14 +5,15 @@ from PyQt5.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget, QHBoxLay
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import Qt
 from cv_bridge import CvBridge
-from sensor_msgs.msg import Image
-
+from sensor_msgs.msg import CompressedImage
+import numpy as np
+import cv2
 
 class VideoSubscriber(Node):
     def __init__(self, topic_name, update_callback):
         super().__init__('video_subscriber_' + topic_name)
         self.subscription = self.create_subscription(
-            Image,
+            CompressedImage,
             topic_name,  # 구독할 토픽 이름
             self.listener_callback,
             10)
@@ -20,10 +21,12 @@ class VideoSubscriber(Node):
         self.update_callback = update_callback  # UI 업데이트 콜백 함수
 
     def listener_callback(self, msg):
-        # ROS 메시지를 OpenCV 이미지로 변환
-        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        self.update_callback(frame)  # 이미지를 UI에 전달
+        # CompressedImage 데이터를 OpenCV 이미지로 변환
+        np_arr = np.frombuffer(msg.data, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
+        # 디코딩된 이미지를 UI에 업데이트
+        self.update_callback(frame)
 
 class TestUINode(QWidget):
     def __init__(self):
@@ -62,7 +65,10 @@ class TestUINode(QWidget):
         bytes_per_line = 3 * width
         qimage = QImage(frame.data, width, height, bytes_per_line, QImage.Format_BGR888)
         pixmap = QPixmap.fromImage(qimage)
-        label.setPixmap(pixmap)
+
+        # QLabel 크기에 맞춰 QPixmap 크기를 조정
+        scaled_pixmap = pixmap.scaled(label.width(), label.height(), Qt.KeepAspectRatio)
+        label.setPixmap(scaled_pixmap)
 
     def closeEvent(self, event):
         # 창 닫힐 때 ROS 2 노드 종료
