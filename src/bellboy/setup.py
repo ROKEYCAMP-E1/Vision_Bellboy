@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'topview_node = bellboy.topview_camera.topview_cam_node:main', 
         ],
     },
 )

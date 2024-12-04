@@ -1,0 +1,14 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/rokey/5w/5w_ws/install/bellboy/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages",
+        "/home/rokey/turtlebot3_ws/install/turtlebot3_msgs/lib/python3.12/site-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/rokey/5w/5w_ws/install/bellboy/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages",
+        "/home/rokey/turtlebot3_ws/install/turtlebot3_msgs/lib/python3.12/site-packages"
+    ]
+}
