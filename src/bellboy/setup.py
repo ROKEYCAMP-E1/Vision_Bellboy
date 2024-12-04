@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'topview_node = bellboy.topview_camera.topview_cam_node:main', 
+            'testui_node = bellboy.UI.testui_node:main'
         ],
     },
 )
