@@ -1,3 +1,4 @@
+# amr_node.py
 # jetson nano에서 돌아가야 하는 코드
 import cv2
 import rclpy

@@ -21,7 +21,7 @@ class topview_node(Node):
         self.model = YOLO("src/bellboy/bellboy/topview_camera/topview_model_v11.pt")
 
         # USB 카메라 연결
-        self.cap = cv2.VideoCapture('/dev/video2') # 카메라 usb번호 입력해주세요
+        self.cap = cv2.VideoCapture('/dev/video3') # 카메라 usb번호 입력해주세요
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG')) 
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280) 
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
