@@ -2,34 +2,32 @@
 
 import cv2
 import rclpy
+import requests
 from rclpy.node import Node
-from cv_bridge import CvBridge
-from sensor_msgs.msg import CompressedImage
+from threading import Thread, Lock
+from queue import Queue
 from ultralytics import YOLO
 
 
-
-class topview_node(Node):
-    def __init__(self):
+class TopViewNode(Node):
+    def __init__(self, frame_queue):
         super().__init__('topview_node')
-        self.publisher_ = self.create_publisher(CompressedImage, 'top_video', 10)
-        self.timer = self.create_timer(0.1, self.timer_callback)  
-
-        # OpenCV와 ROS 간 이미지를 변환할 브리지
-        self.bridge = CvBridge()
-
-        # YOLO 모델 로드
-        self.model = YOLO("src/bellboy/bellboy/topview_camera/topview_model_v11.pt")
 
         # USB 카메라 연결
-        self.cap = cv2.VideoCapture('/dev/video0') # 카메라 usb번호 입력해주세요
-        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG')) 
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280) 
+        self.cap = cv2.VideoCapture('/dev/video2')
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
         if not self.cap.isOpened():
             self.get_logger().error("Cannot open camera.")
             exit()
+
+        self.frame_queue = frame_queue
+        self.lock = Lock()
+
+        # 타이머 설정 (10 FPS)
+        self.timer = self.create_timer(0.1, self.timer_callback)
 
     def timer_callback(self):
         ret, frame = self.cap.read()
@@ -37,34 +35,74 @@ class topview_node(Node):
             self.get_logger().error("Failed to grab frame.")
             return
 
-        # YOLO 모델로 탐지 수행
-        results = self.model(frame, conf=0.65)
-
-        # 탐지 결과 표시 (annotated_frame)
-        annotated_frame = results[0].plot()
-
-        # OpenCV 이미지를 JPEG로 압축
-        success, encoded_image = cv2.imencode('.jpg', annotated_frame)
-        if not success:
-            self.get_logger().error("Failed to encode frame.")
-            return
-
-        # CompressedImage 메시지 생성
-        compressed_image = CompressedImage()
-        compressed_image.header.stamp = self.get_clock().now().to_msg()
-        compressed_image.format = "jpeg"
-        compressed_image.data = encoded_image.tobytes()
+        with self.lock:
+            if not self.frame_queue.full():
+                self.frame_queue.put(frame)
 
 
-        # ROS 메시지 퍼블리싱
-        self.publisher_.publish(compressed_image)
+def yolo_thread(frame_queue, result_queue):
+    """YOLO 추론 스레드"""
+    model = YOLO("src/bellboy/bellboy/topview_camera/topview_model_v11.pt")
+
+    while True:
+        if not frame_queue.empty():
+            frame = frame_queue.get()
+            resized_frame = cv2.resize(frame, (640, 360))
+            # YOLO 추론
+            results = model(resized_frame, conf=0.65)
+            annotated_frame = results[0].plot()
+            result_queue.put(annotated_frame)
+
+
+def http_thread(result_queue):
+    """HTTP 요청 스레드"""
+    server_url = "http://127.0.0.1:5000/topview_cam"
+
+    while True:
+        if not result_queue.empty():
+            frame = result_queue.get()
+
+            # JPEG로 인코딩
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 70]
+            success, encoded_image = cv2.imencode('.jpg', frame, encode_param)
+            if not success:
+                print("Failed to encode frame.")
+                continue
+
+            try:
+                response = requests.post(
+                    server_url,
+                    files={"frame": encoded_image.tobytes()}
+                )
+                if response.status_code != 200:
+                    print(f"Server response error: {response.status_code}")
+            except Exception as e:
+                print(f"HTTP request failed: {e}")
+
 
 def main(args=None):
     rclpy.init(args=args)
-    topview_cam = topview_node()
-    rclpy.spin(topview_cam)
-    topview_cam.destroy_node()
-    rclpy.shutdown()
 
-if __name__ == '__main__':
+    # 큐 생성
+    frame_queue = Queue(maxsize=10)
+    result_queue = Queue(maxsize=10)
+
+    # YOLO 스레드 시작
+    yolo_t = Thread(target=yolo_thread, args=(frame_queue, result_queue), daemon=True)
+    yolo_t.start()
+
+    # HTTP 스레드 시작
+    http_t = Thread(target=http_thread, args=(result_queue,), daemon=True)
+    http_t.start()
+
+    # ROS 노드 실행
+    topview_cam = TopViewNode(frame_queue)
+    try:
+        rclpy.spin(topview_cam)
+    finally:
+        topview_cam.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
     main()
