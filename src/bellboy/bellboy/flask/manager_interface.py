@@ -4,8 +4,10 @@ from flask import Flask, render_template, Response, request
 import cv2
 import numpy as np
 import threading
+from flask_socketio import SocketIO
 
 app = Flask(__name__)
+socketio = SocketIO(app)
 
 # 전역 변수 및 락 설정
 latest_frame = None
@@ -13,6 +15,7 @@ frame_lock = threading.Lock()
 
 @app.route('/')
 def index():
+    """HTML 페이지 렌더링"""
     return render_template('index.html')
 
 @app.route('/topview_cam', methods=['POST'])
@@ -30,29 +33,23 @@ def upload_frame():
     with frame_lock:
         np_arr = np.frombuffer(frame_data, np.uint8)
         latest_frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    # WebSocket을 통해 클라이언트로 전송
+    if latest_frame is not None:
+        _, buffer = cv2.imencode('.jpg', latest_frame)
+        socketio.emit('frame', buffer.tobytes())
     return "Frame received", 200
 
-def generate_frames():
-    """Flask 스트리밍용 프레임 생성"""
-    global latest_frame
-    while True:
-        with frame_lock:
-            if latest_frame is not None:
-                frame = latest_frame.copy()
-            else:
-                frame = None
+@socketio.on('connect')
+def handle_connect():
+    """클라이언트가 연결되었을 때"""
+    print("Client connected.")
 
-        if frame is not None:
-            success, buffer = cv2.imencode('.jpg', frame)
-            if success:
-                frame = buffer.tobytes()
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+@socketio.on('disconnect')
+def handle_disconnect():
+    """클라이언트가 연결이 끊겼을 때"""
+    print("Client disconnected.")
 
-@app.route('/video_feed')
-def video_feed():
-    """비디오 피드를 스트리밍"""
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
     app.run(debug=True)

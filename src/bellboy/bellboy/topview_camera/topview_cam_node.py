@@ -1,11 +1,7 @@
-# topview_cam_node.py
-
 import cv2
 import rclpy
-import requests
 from rclpy.node import Node
-from threading import Thread, Lock
-from queue import Queue
+from multiprocessing import Process, Queue
 from ultralytics import YOLO
 
 
@@ -14,7 +10,7 @@ class TopViewNode(Node):
         super().__init__('topview_node')
 
         # USB 카메라 연결
-        self.cap = cv2.VideoCapture('/dev/video2')
+        self.cap = cv2.VideoCapture('/dev/video0')
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
@@ -24,7 +20,6 @@ class TopViewNode(Node):
             exit()
 
         self.frame_queue = frame_queue
-        self.lock = Lock()
 
         # 타이머 설정 (10 FPS)
         self.timer = self.create_timer(0.1, self.timer_callback)
@@ -35,65 +30,79 @@ class TopViewNode(Node):
             self.get_logger().error("Failed to grab frame.")
             return
 
-        with self.lock:
-            if not self.frame_queue.full():
-                self.frame_queue.put(frame)
+        if not self.frame_queue.full():
+            self.frame_queue.put(frame)
+            self.get_logger().info("Frame added to queue.")
+        else:
+            self.get_logger().warn("Frame queue is full. Dropping frame.")
 
 
-def yolo_thread(frame_queue, result_queue):
-    """YOLO 추론 스레드"""
+def yolo_process(frame_queue, result_queue):
+    """YOLO 추론 멀티프로세스"""
     model = YOLO("src/bellboy/bellboy/topview_camera/topview_model_v11.pt")
+    print("YOLO 모델 로드 완료.")
 
     while True:
-        if not frame_queue.empty():
-            frame = frame_queue.get()
-            resized_frame = cv2.resize(frame, (640, 360))
-            # YOLO 추론
-            results = model(resized_frame, conf=0.65)
-            annotated_frame = results[0].plot()
-            result_queue.put(annotated_frame)
+        if frame_queue.empty():
+            continue  # 큐가 비어 있으면 대기
+        frame = frame_queue.get()
+        print("YOLO: 프레임 가져오기 완료.")
 
 
-def http_thread(result_queue):
-    """HTTP 요청 스레드"""
+        # YOLO 추론
+        results = model(frame, conf=0.65)
+        print("YOLO: 추론 완료.")
+
+        annotated_frame = results[0].plot()
+        result_queue.put(annotated_frame)
+        print("YOLO: 결과 큐에 추가 완료.")
+
+
+def http_process(result_queue):
+    """HTTP 요청 멀티프로세스"""
+    import requests
     server_url = "http://127.0.0.1:5000/topview_cam"
 
     while True:
-        if not result_queue.empty():
-            frame = result_queue.get()
+        if result_queue.empty():
+            continue  # 큐가 비어 있으면 대기
+        print("HTTP: result_queue에서 프레임 가져오기.")
+        frame = result_queue.get()
 
-            # JPEG로 인코딩
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 70]
-            success, encoded_image = cv2.imencode('.jpg', frame, encode_param)
-            if not success:
-                print("Failed to encode frame.")
-                continue
+        # JPEG로 인코딩
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 70]
+        success, encoded_image = cv2.imencode('.jpg', frame, encode_param)
+        if not success:
+            print("HTTP: 프레임 인코딩 실패.")
+            continue
 
-            try:
-                response = requests.post(
-                    server_url,
-                    files={"frame": encoded_image.tobytes()}
-                )
-                if response.status_code != 200:
-                    print(f"Server response error: {response.status_code}")
-            except Exception as e:
-                print(f"HTTP request failed: {e}")
+        try:
+            response = requests.post(
+                server_url,
+                files={"frame": encoded_image.tobytes()}
+            )
+            if response.status_code == 200:
+                print("HTTP: 서버로 프레임 전송 성공.")
+            else:
+                print(f"HTTP: 서버 응답 오류 {response.status_code}")
+        except Exception as e:
+            print(f"HTTP 요청 실패: {e}")
 
 
 def main(args=None):
     rclpy.init(args=args)
 
     # 큐 생성
-    frame_queue = Queue(maxsize=10)
-    result_queue = Queue(maxsize=10)
+    frame_queue = Queue(maxsize=200)
+    result_queue = Queue(maxsize=200)
 
-    # YOLO 스레드 시작
-    yolo_t = Thread(target=yolo_thread, args=(frame_queue, result_queue), daemon=True)
-    yolo_t.start()
+    # YOLO 프로세스 시작
+    yolo_p = Process(target=yolo_process, args=(frame_queue, result_queue), daemon=True)
+    yolo_p.start()
 
-    # HTTP 스레드 시작
-    http_t = Thread(target=http_thread, args=(result_queue,), daemon=True)
-    http_t.start()
+    # HTTP 프로세스 시작
+    http_p = Process(target=http_process, args=(result_queue,), daemon=True)
+    http_p.start()
 
     # ROS 노드 실행
     topview_cam = TopViewNode(frame_queue)
