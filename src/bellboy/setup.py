@@ -24,6 +24,8 @@ setup(
             'topview_node = bellboy.topview_camera.topview_cam_node:main', 
             'testui_node = bellboy.UI.testui_node:main',
             'amr_node = bellboy.amr.amr_node:main',
+            'manager_interface_node = bellboy.UI.manager_interface:main',
+            'robot_interface_node = bellboy.UI.robot_interface:main',
         ],
     },
 )

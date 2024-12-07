@@ -22,7 +22,7 @@ class AMRNode(Node):
         self.model = YOLO("AMR_camera/AMR_epoch90.pt")
 
         # USB 카메라 연결
-        self.cap = cv2.VideoCapture('/dev/video4')
+        self.cap = cv2.VideoCapture('/dev/video2')
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG')) 
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280) 
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)

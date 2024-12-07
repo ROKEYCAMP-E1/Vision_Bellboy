@@ -1,0 +1,32 @@
+<!-- db_search.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB Search</title>
+</head>
+<body>
+    <h1>Database Search</h1>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Data</th>
+                <!-- Add more columns as needed -->
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in data %}
+                <tr>
+                    <td>{{ row['id'] }}</td>
+                    <td>{{ row['data'] }}</td>
+                    <!-- Add more cells as needed -->
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <button onclick="location.href='/system_monitor'">Back to System Monitor</button>
+    <button onclick="location.href='/logout'">Logout</button>
+</body>
+</html>
