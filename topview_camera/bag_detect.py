@@ -20,7 +20,7 @@ while True:
         break
 
     # YOLO 모델로 추적 수행
-    results = model(source=frame, tracker="botsort.yaml", conf=0.7)  # Botsort 추적기 사용
+    results = model(source=frame, tracker="botsort.yaml")  # Botsort 추적기 사용
 
     # 추적 결과 표시
     annotated_frame = results[0].plot()  # 추적 결과 시각화된 프레임

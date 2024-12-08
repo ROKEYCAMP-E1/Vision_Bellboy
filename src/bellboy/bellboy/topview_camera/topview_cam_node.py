@@ -8,6 +8,8 @@ from ultralytics import YOLO
 class TopViewNode(Node):
     def __init__(self, frame_queue):
         super().__init__('topview_node')
+        self.frame_counter = 0  # Initialize the frame_counter attribute
+        self.frame_queue = frame_queue
 
         # USB 카메라 연결
         self.cap = cv2.VideoCapture('/dev/video0')
@@ -19,21 +21,23 @@ class TopViewNode(Node):
             self.get_logger().error("Cannot open camera.")
             exit()
 
-        self.frame_queue = frame_queue
-
         # 타이머 설정 (10 FPS)
         self.timer = self.create_timer(0.1, self.timer_callback)
 
     def timer_callback(self):
+        self.frame_counter += 1
+        if self.frame_counter % 2 != 0:  # 매 2번째 프레임만 처리
+            return
         ret, frame = self.cap.read()
         if not ret:
             self.get_logger().error("Failed to grab frame.")
             return
+        if self.frame_queue.full():
+            _ = self.frame_queue.get()  # 가장 오래된 데이터 삭제
+        self.frame_queue.put(frame)
+        self.get_logger().info("Frame added to queue.")
 
-        if not self.frame_queue.full():
-            self.frame_queue.put(frame)
-            self.get_logger().info("Frame added to queue.")
-        else:
+        if self.frame_queue.full():
             self.get_logger().warn("Frame queue is full. Dropping frame.")
 
 
@@ -50,7 +54,7 @@ def yolo_process(frame_queue, result_queue):
 
 
         # YOLO 추론
-        results = model(frame, conf=0.65)
+        results = model(frame)
         print("YOLO: 추론 완료.")
 
         annotated_frame = results[0].plot()

@@ -11,6 +11,7 @@ from ultralytics import YOLO
 class AMRNode(Node):
     def __init__(self):
         super().__init__('amr_node')
+        self.frame_counter = 0  # Initialize the frame_counter attribute
 
         # ROS 2 퍼블리셔 생성
         self.publisher_ = self.create_publisher(CompressedImage, 'amr_video', 10)
@@ -35,6 +36,10 @@ class AMRNode(Node):
         self.timer = self.create_timer(0.1, self.timer_callback)
 
     def timer_callback(self):
+        self.frame_counter += 1
+        if self.frame_counter % 2 != 0:  # 매 2번째 프레임만 처리
+            return
+        
         ret, frame = self.cap.read()
         if not ret:
             self.get_logger().error("Failed to grab frame.")
